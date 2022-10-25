@@ -2,6 +2,25 @@
 Changelog for package pyhri
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.3.1 (2022-10-26)
+------------------
+* voice: add support for is_speaking
+* ensure known persons get their face/body/voice instances properly updated
+  Fixes #4
+* Contributors: Séverin Lemaignan
+
+0.3.0 (2022-10-22)
+------------------
+* wire up callbacks for when features appear/disappear
+* body: currently, hri_fullbody (incorrectly) returns a RegionOfInterest for the RoI, instead of a NormalisedRegionOfInterest2D
+* body: skeleton2d now gives direct access to the list of joints coordinates
+* voice: expose last recognised speech + transform
+* use @property to make the API simpler and safer
+  In particular, to transparently provide *copies* of the faces, bodies, voices, persons list in HRIListener
+* body: expose skeleton2d, transform, {RegionOfInterest -> NormalizedRegionOfInterest2D} + doc
+* face: {RegionOfInterest -> NormalizedRegionOfInterest2D} + doc
+* Contributors: Séverin Lemaignan
+
 0.2.0 (2022-10-18)
 ------------------
 * autogenerate docs with rosdoc (for display on ROS wiki) and SPHINX
