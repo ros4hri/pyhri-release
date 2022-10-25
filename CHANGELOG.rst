@@ -2,6 +2,11 @@
 Changelog for package pyhri
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.3.2 (2022-10-25)
+------------------
+* fix RoI-related message types. Unit-tests pass again.
+* Contributors: Séverin Lemaignan
+
 0.3.1 (2022-10-26)
 ------------------
 * voice: add support for is_speaking
