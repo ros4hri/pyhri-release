@@ -9,16 +9,18 @@ import unittest
 import rospy
 import rostest
 
-from hri_msgs.msg import IdsList, NormalizedRegionOfInterest2D
-from std_msgs.msg import String
+from hri_msgs.msg import IdsList, LiveSpeech, RegionOfInterest
+from std_msgs.msg import String, Bool
 
-import hri
+import pyhri
 
 
 class TestHRI(unittest.TestCase):
     def __init__(self, *args):
         super(TestHRI, self).__init__(*args)
         rospy.init_node(NAME, anonymous=True)
+
+        self.cb_triggered = False
 
         self.faces_pub = rospy.Publisher(
             "/humans/faces/tracked", IdsList, queue_size=1, latch=False
@@ -46,7 +48,7 @@ class TestHRI(unittest.TestCase):
 
     def test_get_faces(self):
 
-        hri_listener = hri.HRIListener()
+        hri_listener = pyhri.HRIListener()
         self.wait()
 
         self.assertEquals(self.faces_pub.get_num_connections(), 1)
@@ -75,18 +77,18 @@ class TestHRI(unittest.TestCase):
 
     def test_get_faces_roi(self):
 
-        hri_listener = hri.HRIListener()
+        hri_listener = pyhri.HRIListener()
         self.wait()
 
         roi_A_pub = rospy.Publisher(
             "/humans/faces/A/roi",
-            NormalizedRegionOfInterest2D,
+            RegionOfInterest,
             queue_size=1,
             latch=True,
         )
         roi_B_pub = rospy.Publisher(
             "/humans/faces/B/roi",
-            NormalizedRegionOfInterest2D,
+            RegionOfInterest,
             queue_size=1,
             latch=True,
         )
@@ -112,31 +114,31 @@ class TestHRI(unittest.TestCase):
 
         self.assertIsNone(hri_listener.faces["B"].roi)
 
-        roi_B_pub.publish(xmin=0.1)
+        roi_B_pub.publish(width=10)
         self.wait()
         self.assertIsNotNone(hri_listener.faces["B"].roi)
-        self.assertAlmostEqual(hri_listener.faces["B"].roi.xmin, 0.1)
+        self.assertAlmostEqual(hri_listener.faces["B"].roi.width, 10)
 
-        roi_B_pub.publish(xmin=0.2)
+        roi_B_pub.publish(width=20)
         self.wait()
-        self.assertAlmostEqual(hri_listener.faces["B"].roi.xmin, 0.2)
+        self.assertAlmostEqual(hri_listener.faces["B"].roi.width, 20)
 
         # RoI of face A published *before* face A is published in /faces/tracked,
         # but should still get its RoI, as /roi is latched.
-        roi_A_pub.publish(xmin=0.2)
+        roi_A_pub.publish(width=20)
         self.faces_pub.publish(ids=["A", "B"])
         self.wait(delay=0.1)
 
         self.assertEqual(hri_listener.faces["A"].ns, "/humans/faces/A")
-        self.assertAlmostEqual(hri_listener.faces["A"].roi.xmin, 0.2)
+        self.assertAlmostEqual(hri_listener.faces["A"].roi.width, 20)
         self.assertEqual(hri_listener.faces["B"].ns, "/humans/faces/B")
-        self.assertAlmostEqual(hri_listener.faces["A"].roi.xmin, 0.2)
+        self.assertAlmostEqual(hri_listener.faces["A"].roi.width, 20)
 
         hri_listener.close()
 
     def test_get_bodies(self):
 
-        hri_listener = hri.HRIListener()
+        hri_listener = pyhri.HRIListener()
         self.wait()
 
         self.assertEquals(self.bodies_pub.get_num_connections(), 1)
@@ -176,7 +178,7 @@ class TestHRI(unittest.TestCase):
 
     def test_get_voices(self):
 
-        hri_listener = hri.HRIListener()
+        hri_listener = pyhri.HRIListener()
         self.wait()
 
         self.assertEquals(self.voices_pub.get_num_connections(), 1)
@@ -214,9 +216,67 @@ class TestHRI(unittest.TestCase):
 
         hri_listener.close()
 
+    def cb(self, msg):
+        self.cb_triggered = True
+
+    def voice_cb(self, voice):
+        self.cb_triggered = True
+        voice.on_speaking(self.cb)
+        voice.on_incremental_speech(self.cb)
+        voice.on_speech(self.cb)
+
+    def test_voice_callbacks(self):
+
+        hri_listener = pyhri.HRIListener()
+        self.wait()
+
+        hri_listener.on_voice(self.voice_cb)
+
+        self.cb_triggered = False
+        self.voices_pub.publish(ids=["A"])
+        self.wait()
+        self.assertTrue(self.cb_triggered)
+        self.cb_triggered = False
+
+        self.voice_A_is_speaking_pub = rospy.Publisher(
+            "/humans/voices/A/is_speaking", Bool, queue_size=1, latch=False
+        )
+
+        self.voice_A_speech_pub = rospy.Publisher(
+            "/humans/voices/A/speech", LiveSpeech, queue_size=1, latch=False
+        )
+
+        self.voice_A_is_speaking_pub.publish(data=True)
+        self.wait()
+        self.assertTrue(self.cb_triggered)
+        self.assertTrue(hri_listener.voices["A"].is_speaking)
+        self.cb_triggered = False
+
+        self.voice_A_is_speaking_pub.publish(data=False)
+        self.wait()
+        self.assertTrue(self.cb_triggered)
+        self.assertFalse(hri_listener.voices["A"].is_speaking)
+        self.cb_triggered = False
+
+        self.voice_A_speech_pub.publish(final="test speech")
+        self.wait()
+        self.assertTrue(self.cb_triggered)
+        self.assertEquals(hri_listener.voices["A"].speech, "test speech")
+        self.cb_triggered = False
+
+        self.voice_A_speech_pub.publish(incremental="test speech incremental")
+        self.wait()
+        self.assertTrue(self.cb_triggered)
+        self.assertEquals(
+            hri_listener.voices["A"].incremental_speech, "test speech incremental"
+        )
+        self.cb_triggered = False
+
+        hri_listener.close()
+
     def test_get_known_persons(self):
 
-        hri_listener = hri.HRIListener()
+        hri_listener = pyhri.HRIListener()
         self.wait()
 
         self.assertEquals(self.known_persons_pub.get_num_connections(), 1)
@@ -256,7 +316,7 @@ class TestHRI(unittest.TestCase):
 
     def test_get_tracked_persons(self):
 
-        hri_listener = hri.HRIListener()
+        hri_listener = pyhri.HRIListener()
         self.wait()
 
         self.assertEquals(self.tracked_persons_pub.get_num_connections(), 1)
@@ -296,7 +356,7 @@ class TestHRI(unittest.TestCase):
 
     def test_person_attributes(self):
 
-        hri_listener = hri.HRIListener()
+        hri_listener = pyhri.HRIListener()
         self.wait()
 
         person_face_pub = rospy.Publisher(
